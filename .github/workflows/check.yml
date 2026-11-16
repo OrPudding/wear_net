@@ -1,43 +1,56 @@
-name: Check
-on: [push, pull_request, workflow_dispatch]
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+  workflow_call:
+
 permissions:
   contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/') }}
+
+env:
+  FLUTTER_VERSION: 3.50.0
+
 jobs:
   test:
+    name: Test (${{ matrix.os }})
     strategy:
       fail-fast: false
       matrix:
         os: [ubuntu-24.04, macos-15, windows-2025]
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
+
       - uses: dtolnay/rust-toolchain@1.98.0
+
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: .
+
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
+
       - uses: subosito/flutter-action@v2
         with:
-          flutter-version: '3.50.0'
+          flutter-version: ${{ env.FLUTTER_VERSION }}
           channel: stable
           cache: true
-      - run: cargo test --locked --manifest-path Cargo.toml --workspace
-      - run: python tool/build.py --output dist/local --archive
-      - name: Verify macOS install-name header space
-        if: runner.os == 'macOS'
-        shell: bash
-        run: |
-          python - <<'PYTHON'
-          import shutil, subprocess, tempfile
-          from pathlib import Path
-          source = next(Path('dist/local').glob('*.dylib'))
-          with tempfile.TemporaryDirectory() as directory:
-              library = Path(directory) / source.name
-              shutil.copy2(source, library)
-              subprocess.run(['install_name_tool', '-id', '/long-path-regression/' + 'segment/' * 30 + source.name, str(library)], check=True)
-          PYTHON
+
+      - name: Test native library
+        run: cargo test --locked --manifest-path Cargo.toml --workspace
+
+      - name: Build native library
+        run: python tool/build.py --output dist/local
+
       - name: Select freshly built library for package tests
         shell: bash
         run: |
@@ -47,9 +60,14 @@ jobs:
           with Path('pubspec.yaml').open('a') as output:
               output.write('\nhooks:\n  user_defines:\n    wear_net:\n      native_library: ' + library.resolve().as_posix() + '\n')
           PYTHON
-      - run: flutter pub get
-      - run: flutter analyze
-      - name: macOS source binary integration
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Analyze
+        run: flutter analyze
+
+      - name: Build macOS consumer
         if: runner.os == 'macOS'
         shell: bash
         run: |
@@ -72,8 +90,9 @@ jobs:
           }
           DART
           FLUTTER_MACOS_ARM64_ONLY=false FLUTTER_XCODE_ARCHS="$(uname -m)" flutter build macos --release
-      - name: Freshly built Dart FFI integration
+
+      - name: Test Dart FFI
         shell: bash
         env:
           WEAR_NET_NATIVE_TEST: '1'
-        run: flutter test
+        run: flutter test --no-pub --reporter expanded

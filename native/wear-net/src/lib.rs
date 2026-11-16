@@ -374,12 +374,8 @@ mod tests {
     }
 
     #[test]
-    fn exports_current_abi_version() {
-        assert_eq!(wear_net_abi_version(), ABI_VERSION);
-    }
-
-    #[test]
     fn opens_snapshots_and_closes_a_session() {
+        assert_eq!(wear_net_abi_version(), ABI_VERSION);
         let mut handle = 0;
         assert_eq!(
             unsafe { wear_net_open(&config(), Some(wake), &mut handle) },

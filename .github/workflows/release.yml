@@ -1,12 +1,27 @@
 name: Release
+
 on:
   push:
     tags: ['v*']
   workflow_dispatch:
+
 permissions:
   contents: read
+
+concurrency:
+  group: release-${{ github.ref_name }}
+  cancel-in-progress: false
+
+env:
+  FLUTTER_VERSION: 3.50.0
+
 jobs:
+  check:
+    name: Check package
+    uses: ./.github/workflows/check.yml
+
   build:
+    name: Build (${{ matrix.group }})
     strategy:
       fail-fast: false
       matrix:
@@ -35,31 +50,54 @@ jobs:
             targets:
               - x86_64-pc-windows-msvc
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
+
+      - name: Validate release metadata
+        shell: bash
+        run: |
+          python - <<'PYTHON'
+          import json, os, re
+          from pathlib import Path
+          version = re.search(r'^version:\s*(\S+)', Path('pubspec.yaml').read_text(), re.MULTILINE).group(1)
+          if os.environ['GITHUB_REF'].startswith('refs/tags/'):
+              if os.environ['GITHUB_REF_NAME'] != 'v' + version:
+                  raise SystemExit('Release tag does not match pubspec.yaml version')
+          sdk = json.loads(Path('.fvmrc').read_text())['flutter']
+          if sdk != os.environ['FLUTTER_VERSION']:
+              raise SystemExit('Workflow Flutter version does not match .fvmrc')
+          PYTHON
+
       - uses: dtolnay/rust-toolchain@1.98.0
         with:
           targets: ${{ join(matrix.targets, ',') }}
+
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: .
           key: ${{ matrix.group }}
+
       - uses: nttld/setup-ndk@v1
         if: contains(join(matrix.targets, ','), 'android')
         with:
           ndk-version: r28c
           add-to-path: true
+
       - name: Build release packages
         shell: bash
         env:
           TARGETS: ${{ join(matrix.targets, ' ') }}
         run: |
+          set -euo pipefail
           for target in $TARGETS; do
             python tool/build.py --target "$target" --archive
           done
+
       - uses: actions/upload-artifact@v4
         with:
           name: native-${{ matrix.group }}
@@ -67,10 +105,14 @@ jobs:
             dist/*.zip
             dist/*.sha256
           if-no-files-found: error
+          retention-days: 1
+
   publish:
+    name: Publish release
     if: startsWith(github.ref, 'refs/tags/')
-    needs: build
+    needs: [check, build]
     runs-on: ubuntu-24.04
+    timeout-minutes: 10
     permissions:
       contents: write
     steps:
@@ -79,7 +121,12 @@ jobs:
           pattern: native-*
           merge-multiple: true
           path: dist
-      - uses: softprops/action-gh-release@v2
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ github.ref_name }}
           generate_release_notes: true
+          prerelease: ${{ contains(github.ref_name, '-') }}
+          fail_on_unmatched_files: true
           files: dist/*

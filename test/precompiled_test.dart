@@ -112,15 +112,18 @@ void main() {
   });
 
   test('selects all shipped targets and rejects unsupported targets', () {
-    for (final os in ['android', 'linux', 'macos', 'windows']) {
-      final architectures = switch (os) {
-        'android' => ['arm', 'arm64', 'x64'],
-        'windows' => ['x64'],
-        _ => ['arm64', 'x64'],
-      };
-      for (final architecture in architectures) {
-        expect(releaseTarget(os, architecture), isNotEmpty);
-      }
+    const targets = {
+      ('android', 'arm'): 'armv7-linux-androideabi',
+      ('android', 'arm64'): 'aarch64-linux-android',
+      ('android', 'x64'): 'x86_64-linux-android',
+      ('linux', 'arm64'): 'aarch64-unknown-linux-gnu',
+      ('linux', 'x64'): 'x86_64-unknown-linux-gnu',
+      ('macos', 'arm64'): 'aarch64-apple-darwin',
+      ('macos', 'x64'): 'x86_64-apple-darwin',
+      ('windows', 'x64'): 'x86_64-pc-windows-msvc',
+    };
+    for (final entry in targets.entries) {
+      expect(releaseTarget(entry.key.$1, entry.key.$2), entry.value);
     }
     expect(() => releaseTarget('ios', 'arm64'), throwsUnsupportedError);
     expect(() => releaseTarget('windows', 'arm64'), throwsUnsupportedError);

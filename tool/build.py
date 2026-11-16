@@ -36,7 +36,7 @@ def main():
         ndk_host = "darwin-x86_64" if platform.system() == "Darwin" else "linux-x86_64"
         binaries = Path(ndk) / "toolchains/llvm/prebuilt" / ndk_host / "bin"
         compiler_target = "armv7a-linux-androideabi" if target == "armv7-linux-androideabi" else target
-        compiler = str(binaries / (compiler_target + "26-clang"))
+        compiler = str(binaries / (compiler_target + "24-clang"))
         env["CARGO_TARGET_" + target.upper().replace("-", "_") + "_LINKER"] = compiler
         env["CC_" + target.replace("-", "_")] = compiler
         env["AR_" + target.replace("-", "_")] = str(binaries / "llvm-ar")
@@ -54,7 +54,7 @@ def main():
     else:
         suffix = ".so"
     packages = [("wear-net", "wear_net", "runtime")]
-    command = ["cargo", "rustc", "--crate-type", "staticlib"] if is_ios else ["cargo", "rustc" if suffix == ".dylib" else "build"]
+    command = ["cargo", "rustc", "--crate-type", "staticlib" if is_ios else "cdylib"]
     command.extend(["--locked", "--release", "--manifest-path", str(MANIFEST)])
     if args.offline:
         command.append("--offline")
@@ -85,8 +85,16 @@ def main():
             pending.extend(nodes[current])
         filename = ("" if suffix == ".dll" else "lib") + library + suffix
         target_args = ["--target", target] if target != host else []
-        # 为 Flutter 改写动态库绝对路径预留加载命令空间
-        link_args = ["--", "-C", "link-arg=-Wl,-headerpad_max_install_names"] if suffix == ".dylib" else []
+        link_args = []
+        if "android" in target:
+            link_args = [
+                "--",
+                "-C", "link-arg=-Wl,-z,max-page-size=16384",
+                "-C", "link-arg=-Wl,-z,common-page-size=16384",
+            ]
+        elif suffix == ".dylib":
+            # 为 Flutter 改写动态库绝对路径预留加载命令空间
+            link_args = ["--", "-C", "link-arg=-Wl,-headerpad_max_install_names"]
         run(*command, *target_args, "-p", package, "--lib", *link_args, env=env)
         source = target_root / (target if target != host else "") / "release" / filename
         stage = ROOT / "dist" / target / role
@@ -100,6 +108,18 @@ def main():
             run("strip", "-x", str(output))
         elif suffix == ".so" and strip:
             run(strip, "--strip-unneeded", str(output))
+        if "android" in target:
+            headers = subprocess.check_output(
+                [str(binaries / "llvm-readelf"), "--program-headers", "--wide", str(output)],
+                text=True,
+            )
+            loads = [line.split() for line in headers.splitlines() if line.lstrip().startswith("LOAD ")]
+            if not loads or any(
+                int(fields[-1], 16) < 16384
+                or (int(fields[1], 16) - int(fields[2], 16)) % 16384 != 0
+                for fields in loads
+            ):
+                raise RuntimeError(f"Android library is not 16 KiB aligned: {output}")
         if suffix == ".dll" and source.with_suffix(".dll.lib").exists():
             shutil.copy2(source.with_suffix(".dll.lib"), stage / "lib")
         for name in ("LICENSE", "README.md", "README.en.md", "THIRD_PARTY_NOTICES.md", "THIRD_PARTY_NOTICES.en.md"):
