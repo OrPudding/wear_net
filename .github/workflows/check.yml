@@ -1,0 +1,79 @@
+name: Check
+on: [push, pull_request, workflow_dispatch]
+permissions:
+  contents: read
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, macos-15, windows-2025]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@1.98.0
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: .
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.50.0'
+          channel: stable
+          cache: true
+      - run: cargo test --locked --manifest-path Cargo.toml --workspace
+      - run: python tool/build.py --output dist/local --archive
+      - name: Verify macOS install-name header space
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          python - <<'PYTHON'
+          import shutil, subprocess, tempfile
+          from pathlib import Path
+          source = next(Path('dist/local').glob('*.dylib'))
+          with tempfile.TemporaryDirectory() as directory:
+              library = Path(directory) / source.name
+              shutil.copy2(source, library)
+              subprocess.run(['install_name_tool', '-id', '/long-path-regression/' + 'segment/' * 30 + source.name, str(library)], check=True)
+          PYTHON
+      - name: Select freshly built library for package tests
+        shell: bash
+        run: |
+          python - <<'PYTHON'
+          from pathlib import Path
+          library = next(p for p in Path('dist/local').iterdir() if p.suffix in ('.so', '.dylib', '.dll'))
+          with Path('pubspec.yaml').open('a') as output:
+              output.write('\nhooks:\n  user_defines:\n    wear_net:\n      native_library: ' + library.resolve().as_posix() + '\n')
+          PYTHON
+      - run: flutter pub get
+      - run: flutter analyze
+      - name: macOS source binary integration
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          flutter create --empty --platforms=macos --project-name native_smoke "$RUNNER_TEMP/native-assets-long-path-regression/consumer/project/native_smoke"
+          cd "$RUNNER_TEMP/native-assets-long-path-regression/consumer/project/native_smoke"
+          flutter pub add "wear_net@{path: '$GITHUB_WORKSPACE'}"
+          python - <<'PYTHON'
+          import os
+          from pathlib import Path
+          library = next((Path(os.environ["GITHUB_WORKSPACE"]) / "dist/local").glob("*.dylib"))
+          with Path("pubspec.yaml").open("a") as output:
+              output.write(chr(10).join(["", "hooks:", "  user_defines:", "    wear_net:", "      native_library: " + library.resolve().as_posix(), ""]))
+          PYTHON
+          cat > lib/main.dart <<'DART'
+          import 'package:flutter/material.dart';
+          import 'package:wear_net/wear_net.dart';
+          Future<void> main() async {
+            WidgetsFlutterBinding.ensureInitialized();
+            final session = await WearNetSession.open(); await session.close(); runApp(const MaterialApp(home: Text('wear_net')));
+          }
+          DART
+          FLUTTER_MACOS_ARM64_ONLY=false FLUTTER_XCODE_ARCHS="$(uname -m)" flutter build macos --release
+      - name: Freshly built Dart FFI integration
+        shell: bash
+        env:
+          WEAR_NET_NATIVE_TEST: '1'
+        run: flutter test

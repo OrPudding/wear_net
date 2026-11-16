@@ -1,0 +1,38 @@
+{
+  "repository": "OrPudding/wear_net",
+  "tag": "v0.2.1",
+  "libraries": {
+    "aarch64-apple-darwin": {
+      "archiveSha256": "a2bbaa7bbb7543363fd307ab3ae991bf77b1b23b71e7f6842c70ce3b4acc2541",
+      "librarySha256": "fa2820f030df0837164b9b3c583ebcac12ffa3faf25e1537a35d383355b8d988"
+    },
+    "aarch64-linux-android": {
+      "archiveSha256": "4b317cbe571deb8ccf58a2ff05718aeab097dddef471a2eb8ac1baa49c4bfd7d",
+      "librarySha256": "d15811a38990f1220b25e0ba35788515489957914c45ed9e1296faea5cd9b122"
+    },
+    "aarch64-unknown-linux-gnu": {
+      "archiveSha256": "45d04b1d6f823adf015b3ea0c0c1b3a6947dd5a2767775d031195dd4662c7b3a",
+      "librarySha256": "70e64af5aa98c6c3cd26e01000b55297fb7b378f549277cc6792c3d7992f5ce2"
+    },
+    "armv7-linux-androideabi": {
+      "archiveSha256": "8626ef787c9580c0f557547e1cc00ae457ff384bf1a2a87222d99cb82f68019b",
+      "librarySha256": "8815f7ffdfd4ed896894c392a2b6514b1121d694b600a5543db1555dee523765"
+    },
+    "x86_64-apple-darwin": {
+      "archiveSha256": "be98a9b4f2fa2ddf0ec58da72fe241055d1774b632ba2e2863b668f828e305a2",
+      "librarySha256": "65e52ca56023f317c9f762a64000fe6c647280663baf730989e80bed09e82fc0"
+    },
+    "x86_64-linux-android": {
+      "archiveSha256": "d56eaa03b8819b1847d43335f708e9b4ad98e2e2c4b77f70be9efe682d28c388",
+      "librarySha256": "f77576a65b127c34ac3428c557eb7a3e4d01858fee5aea02902d10fffec2e30d"
+    },
+    "x86_64-pc-windows-msvc": {
+      "archiveSha256": "c0880f544e1caa52c051a48ff522b14e2a6ae76699cd784c3c046322cbf38317",
+      "librarySha256": "700a00dd9c27c4dd71c427749ad2ca36478e55d2a420e80fac89f2a9c3d42e14"
+    },
+    "x86_64-unknown-linux-gnu": {
+      "archiveSha256": "784f1ce2e338583ea6d711d7b7e429c55f27f7392c90909b859d1219e2c22c08",
+      "librarySha256": "1f19507a51fce167b0e4f97e743257a48464913da37f0dfc9bec0a7c537f90c3"
+    }
+  }
+}
