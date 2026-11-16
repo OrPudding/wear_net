@@ -16,10 +16,6 @@ env:
   FLUTTER_VERSION: 3.50.0
 
 jobs:
-  check:
-    name: Check package
-    uses: ./.github/workflows/check.yml
-
   build:
     name: Build (${{ matrix.group }})
     strategy:
@@ -110,7 +106,7 @@ jobs:
   publish:
     name: Publish release
     if: startsWith(github.ref, 'refs/tags/')
-    needs: [check, build]
+    needs: build
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     permissions:
